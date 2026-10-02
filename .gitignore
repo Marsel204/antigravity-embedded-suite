@@ -1,0 +1,18 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Build artifacts & temporary files
+*.bin
+*.elf
+*.hex
+*.tmp
+*.bak
+.cache/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
