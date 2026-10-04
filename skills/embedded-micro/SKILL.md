@@ -64,24 +64,47 @@ pio run 2>&1 | tail -n 25
 
 ---
 
-## 5. Mandatory Upload & Automated Serial Verification Chain
+## 5. Dedicated User Serial Monitor & Cooperative Flashing
 
-Whenever firmware is flashed to a physical board, the agent MUST execute this **atomic 2-step pipeline**:
+To provide a dedicated terminal serial monitor window for the user without conflicting with firmware flashing (preventing `[Errno 16] Device or resource busy`), use the embedded cooperative serial manager:
 
-### Step 5A: Flash Firmware
+### 5A. Launch Dedicated Serial Monitor Window (For User)
+When the user asks to open or view the serial monitor, or during interactive debugging:
 ```bash
+python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py launch [--baud 115200] [--port /dev/ttyACM0]
+```
+- Spawns an interactive terminal window (`alacritty`, `foot`, `kitty`, etc.) streaming live microcontroller logs.
+- Simultaneously writes clean, timestamped output to `$XDG_RUNTIME_DIR/embedded-micro/<port>.log`.
+
+### 5B. Cooperative Pre/Post Flash Lifecycle
+Linux serial ports are exclusive. When flashing while a monitor is active, pause it before flashing and resume immediately after:
+```bash
+# 1. Release port before upload
+python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py pause
+
+# 2. Flash firmware
 arduino-cli upload -p <port> --fqbn <target> <sketch-directory>
+
+# 3. Resume monitor immediately (re-attaches user's terminal window)
+python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py resume
 ```
 
-### Step 5B: AUTOMATIC Serial Verification (MANDATORY)
-Immediately after flashing succeeds, the agent MUST automatically capture the first 5 seconds of boot output:
+---
+
+## 6. Mandatory Automated Serial Verification Chain
+
+Whenever firmware is flashed to a physical board, the agent MUST execute this verification pipeline:
+
+### Step 6A: Automated Boot Capture (MANDATORY)
+Immediately after flashing succeeds, capture the first 5 seconds of boot output using the cooperative manager:
 ```bash
-timeout 5s arduino-cli monitor -p <port> -c baudrate=115200 2>&1 || true
+python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py capture --duration 5 [--baud 115200]
 ```
-*(Or read via Python serial stream if required)*.
+*(If the user's GUI monitor window is already active, `capture` safely tails the shared stream without disrupting the port)*.
 
-### Step 5C: Report Boot & Runtime Logs
+### Step 6B: Report Boot & Runtime Logs
 Always display the captured boot output directly in chat under:
 `### Live Boot & Runtime Verification`
 - Verify that the board bootloaded without crashes, WDT resets, or panic dumps.
 - Display the initial telemetry/serial lines directly to the user so they see proof of execution without touching a terminal.
+
