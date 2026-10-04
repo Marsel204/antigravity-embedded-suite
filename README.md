@@ -44,7 +44,14 @@ The **Antigravity Embedded Engineering Suite** is a 4-pillar agentic development
 * **In-Situ Diagnostic Probe:** All-in-one probe sketch that queries `esp_reset_reason()` and scans all 127 I2C bus addresses.
 * **Interactive HIL Interview:** Guides the human developer through physical checks (common ground, power sag, loose jumpers).
 
+### 5. `read-telemetry` (Token-Efficient Sensor Ingestion)
+* **Run-Length Deduplication (`dedup`):** Collapses repetitive 10–100Hz serial lines into count annotations (`[x50 repeated]`).
+* **Statistical Window Summary (`summary`):** Summarizes numeric channels (min, max, mean, stddev, latest) in a compact Markdown table.
+* **Delta Filtering (`deltas`):** Filters out baseline noise and only outputs lines when values cross a sensitivity threshold.
+* **Instant Snapshot (`snapshot`):** Single-line status check across all active sensor channels.
+
 ---
+
 
 ## Directory Structure
 
@@ -68,11 +75,14 @@ antigravity-embedded-suite/
     │   ├── SKILL.md
     │   ├── references/               # Sensor catalog & NVS storage
     │   └── scripts/                  # Sampling & curve fitting
-    └── embedded-triage/              # Fault isolation & crash decoder
+    ├── embedded-triage/              # Fault isolation & crash decoder
+    │   ├── SKILL.md
+    │   ├── probes/                   # In-situ I2C & reset probe sketch
+    │   ├── references/               # Diagnostic trees & reset reasons
+    │   └── scripts/                  # Crash dump analyzer
+    └── read-telemetry/               # Token-efficient sensor preprocessing
         ├── SKILL.md
-        ├── probes/                   # In-situ I2C & reset probe sketch
-        ├── references/               # Diagnostic trees & reset reasons
-        └── scripts/                  # Crash dump analyzer
+        └── scripts/                  # Telemetry preprocessor (dedup, stats, deltas)
 ```
 
 ---
