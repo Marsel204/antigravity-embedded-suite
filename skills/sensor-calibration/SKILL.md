@@ -22,26 +22,30 @@ Identify the exact sensor model and load its dedicated calibration protocol from
 
 ### Phase 1: Deploy Raw Sampler Firmware
 Flash a lightweight sketch via `embedded-micro` that reads the raw ADC/register value and prints it formatted as:
-`RAW: <integer_value>` every 100ms at 115200 baud.
-*(If a serial monitor window is active, pause it before upload and resume immediately after)*.
+`RAW: <integer_value>` every 100ms at 115200 baud:
+```bash
+arduino-cli upload -p <port> --fqbn <target> <sampler-sketch>
+```
 
-### Phase 2: Launch Dedicated Serial Monitor & Issue Step Prompts
-1. **Launch Live Monitor Window (For User):**
-   Open a dedicated floating terminal window so the user can watch raw readings stabilize:
+### Phase 2: Live Monitor & Sensor Physical Step Prompts
+1. **Interactive Serial Monitor:**
+   Open serial monitor so the user can watch raw readings stabilize:
    ```bash
-   python3 ~/.gemini/config/skills/sensor-calibration/scripts/serial_monitor.py launch [--baud 115200] [--port /dev/ttyACM0]
+   arduino-cli monitor -p <port> -c baudrate=115200
    ```
+   *(Or launch in separate window: `alacritty --title "Calibration Monitor" -e arduino-cli monitor -p <port> -c baudrate=115200 &`)*.
+
 2. **Issue Physical Step Prompt:**
    Provide tailored physical instructions matching the sensor's physical medium and wait for user confirmation:
    - *Example (pH Probe):* "Step 1: Rinse probe in distilled water and submerge in pH 7.00 buffer solution. Watch the serial monitor until RAW values stabilize, then type 'ready'."
    - *Example (Load Cell):* "Step 1: Remove all items from the scale platform (Tare state). Type 'ready' when stable."
 
 ### Phase 3: Automated Bounded Serial Data Harvesting
-The instant the user says "ready", capture 20 raw samples in the background:
+The instant the user says "ready", exit the interactive monitor (`Ctrl + C`) and capture 20 raw samples:
 ```bash
-python3 ~/.gemini/config/skills/sensor-calibration/scripts/compute_calibration.py --sample-port /dev/ttyACM0 --count 20
+python3 ~/.gemini/config/skills/sensor-calibration/scripts/compute_calibration.py --sample-port <port> --count 20
 ```
-- Automatically reads from the active monitor's shared log without port conflict, or connects directly if no window is open.
+- Reads 20 samples directly (or from shared monitor stream if running).
 - Computes mean and standard deviation. Discards samples with high variance (noise/movement).
 
 ### Phase 4: Multi-Point Testing & Mathematical Fit
@@ -52,15 +56,16 @@ python3 ~/.gemini/config/skills/sensor-calibration/scripts/compute_calibration.p
 ```
 
 ### Phase 5: Deploy Production Firmware with NVS Flash Persistence
-1. Release serial port before flashing:
+1. Stop any running serial monitor to free the port.
+2. Generate and flash production firmware using ESP32 `Preferences.h` (or Arduino `EEPROM.h`) storing the calculated parameters:
    ```bash
-   python3 ~/.gemini/config/skills/sensor-calibration/scripts/serial_monitor.py pause
+   arduino-cli upload -p <port> --fqbn <target> <production-sketch>
    ```
-2. Generate and flash production firmware using ESP32 `Preferences.h` (or Arduino `EEPROM.h`) that stores the calculated parameters directly into flash memory.
-3. Resume monitor:
+3. Verify live operation:
    ```bash
-   python3 ~/.gemini/config/skills/sensor-calibration/scripts/serial_monitor.py resume
+   arduino-cli monitor -p <port> -c baudrate=115200
    ```
+
 
 
 ---

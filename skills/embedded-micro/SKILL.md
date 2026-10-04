@@ -64,30 +64,30 @@ pio run 2>&1 | tail -n 25
 
 ---
 
-## 5. Dedicated User Serial Monitor & Cooperative Flashing
+## 5. Serial Monitoring Protocol (`arduino-cli monitor`)
 
-To provide a dedicated terminal serial monitor window for the user without conflicting with firmware flashing (preventing `[Errno 16] Device or resource busy`), use the embedded cooperative serial manager:
+The standard protocol for observing serial output on microcontrollers uses native `arduino-cli monitor`.
 
-### 5A. Launch Dedicated Serial Monitor Window (For User)
-When the user asks to open or view the serial monitor, or during interactive debugging:
+### 5A. Direct Terminal Serial Monitor
+To monitor serial logs interactively:
 ```bash
-python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py launch [--baud 115200] [--port /dev/ttyACM0]
+arduino-cli monitor -p <port> -c baudrate=115200
 ```
-- Spawns an interactive terminal window (`alacritty`, `foot`, `kitty`, etc.) streaming live microcontroller logs.
-- Simultaneously writes clean, timestamped output to `$XDG_RUNTIME_DIR/embedded-micro/<port>.log`.
+*(Exit the monitor at any time using `Ctrl + C`)*.
 
-### 5B. Cooperative Pre/Post Flash Lifecycle
-Linux serial ports are exclusive. When flashing while a monitor is active, pause it before flashing and resume immediately after:
+### 5B. Dedicated Window Launcher (When Requested)
+If the user requests to launch the serial monitor in its own desktop window:
 ```bash
-# 1. Release port before upload
-python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py pause
-
-# 2. Flash firmware
-arduino-cli upload -p <port> --fqbn <target> <sketch-directory>
-
-# 3. Resume monitor immediately (re-attaches user's terminal window)
-python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py resume
+# Uses alacritty, foot, kitty, or xterm
+alacritty --title "Serial Monitor (<port>)" -e arduino-cli monitor -p <port> -c baudrate=115200 &
 ```
+
+### 5C. Port Exclusivity & Pre-Flash Rule (CRITICAL)
+Linux enforces exclusive serial device locking (`TIOCEXCL`).
+* **Before running `arduino-cli upload`:** Any active `arduino-cli monitor` process or window MUST be stopped (`Ctrl + C` or kill) to prevent `[Errno 16] Device or resource busy`.
+* **After upload completes:** Re-launch or restart the monitor.
+
+*(Optional background telemetry helper: `python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py` is preserved for headless cooperative multiplexing if needed).*
 
 ---
 
@@ -96,15 +96,16 @@ python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py resume
 Whenever firmware is flashed to a physical board, the agent MUST execute this verification pipeline:
 
 ### Step 6A: Automated Boot Capture (MANDATORY)
-Immediately after flashing succeeds, capture the first 5 seconds of boot output using the cooperative manager:
+Immediately after flashing succeeds, capture the first 5 seconds of boot output using native `arduino-cli monitor`:
 ```bash
-python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py capture --duration 5 [--baud 115200]
+timeout 5s arduino-cli monitor -p <port> -c baudrate=115200 2>&1 || true
 ```
-*(If the user's GUI monitor window is already active, `capture` safely tails the shared stream without disrupting the port)*.
+*(Or read via Python telemetry script if programmatic stream parsing is needed)*.
 
 ### Step 6B: Report Boot & Runtime Logs
 Always display the captured boot output directly in chat under:
 `### Live Boot & Runtime Verification`
 - Verify that the board bootloaded without crashes, WDT resets, or panic dumps.
 - Display the initial telemetry/serial lines directly to the user so they see proof of execution without touching a terminal.
+
 

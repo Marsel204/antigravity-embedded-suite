@@ -14,35 +14,36 @@ This skill defines the operational protocol for isolating bugs, diagnosing unexp
 When a system fails to behave as expected (crashes, reboots, returns -1, freezes, or fails to actuate), execute this pipeline:
 
 ### Phase 1: Live Serial Monitor & Crash Inspection
-1. **Launch Dedicated Monitor Window (For User):**
-   When troubleshooting or when requested by the user, launch a live floating serial terminal:
+1. **Interactive Serial Monitor:**
+   Inspect live reboot loops, panic dumps, and boot logs directly using `arduino-cli monitor`:
    ```bash
-   python3 ~/.gemini/config/skills/embedded-triage/scripts/serial_monitor.py launch [--baud 115200] [--port /dev/ttyACM0]
+   arduino-cli monitor -p <port> -c baudrate=115200
    ```
-2. **Run Automated Crash Analyzer:**
+   *(Or launch in separate window: `alacritty --title "Triage Monitor" -e arduino-cli monitor -p <port> -c baudrate=115200 &`)*.
+
+2. **Automated Crash Analysis (Optional):**
+   Run the crash pattern analyzer against captured output, text, or files:
    ```bash
-   python3 ~/.gemini/config/skills/embedded-triage/scripts/analyze_crash.py [--port auto] [--timeout 5]
+   python3 ~/.gemini/config/skills/embedded-triage/scripts/analyze_crash.py --port <port> --timeout 5
    ```
-   - Automatically detects if the monitor window is running and inspects the shared stream without port lock contention.
    - If a **Guru Meditation**, **Panic Dump**, or **Brownout** is detected, the analyzer immediately identifies the root cause (e.g. Null pointer, Stack overflow, Power sag) without needing hardware changes.
 
 ### Phase 2: In-Situ Diagnostic Probe Deployment
 If the code compiles and runs but peripherals don't respond (e.g. sensor always returns 0/-1, I2C freeze):
-1. Flash the universal diagnostic probe cooperatively:
+1. **Flash Diagnostic Probe:**
+   Ensure any active `arduino-cli monitor` is stopped (`Ctrl + C`), then compile and upload the probe:
    ```bash
-   # 1. Release serial port before upload (monitor window stays open)
-   python3 ~/.gemini/config/skills/embedded-triage/scripts/serial_monitor.py pause
-
-   # 2. Compile & upload diagnostic probe
    arduino-cli compile --fqbn esp32:esp32:esp32s3 ~/.gemini/config/skills/embedded-triage/probes
-   arduino-cli upload -p /dev/ttyACM0 --fqbn esp32:esp32:esp32s3 ~/.gemini/config/skills/embedded-triage/probes
-
-   # 3. Re-attach serial monitor window
-   python3 ~/.gemini/config/skills/embedded-triage/scripts/serial_monitor.py resume
+   arduino-cli upload -p <port> --fqbn esp32:esp32:esp32s3 ~/.gemini/config/skills/embedded-triage/probes
    ```
-2. Automatically monitor the probe output:
+2. **Monitor Probe Telemetry:**
+   Launch monitor to read the probe diagnostic report:
+   ```bash
+   arduino-cli monitor -p <port> -c baudrate=115200
+   ```
    - Identifies the last hardware reset reason (`esp_reset_reason()`).
    - Scans all 127 I2C addresses on SDA/SCL lines.
+
    - Reports free heap, internal chip temperature, and stack health.
 
 
