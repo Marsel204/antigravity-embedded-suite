@@ -105,7 +105,16 @@ timeout 5s arduino-cli monitor -p <port> -c baudrate=115200 2>&1 || true
 ### Step 6B: Report Boot & Runtime Logs
 Always display the captured boot output directly in chat under:
 `### Live Boot & Runtime Verification`
-- Verify that the board bootloaded without crashes, WDT resets, or panic dumps.
-- Display the initial telemetry/serial lines directly to the user so they see proof of execution without touching a terminal.
+
+1. **Copy-Paste Monitor Command (MANDATORY):**
+   Always provide the exact interactive monitor command in its own dedicated bash code block for easy 1-click copying:
+   ```bash
+   arduino-cli monitor -p <port> -c baudrate=115200
+   ```
+
+2. **Telemetry Output & Sanity Checks:**
+   - Display the captured lines in a fenced code block so the user sees proof of execution.
+   - Verify that the board bootloaded without crashes, WDT resets, or panic dumps.
+
 
 
