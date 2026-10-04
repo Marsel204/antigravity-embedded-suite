@@ -7,6 +7,18 @@ Parses serial output for Guru Meditation errors, Brownout resets, and Watchdog p
 import sys
 import re
 import argparse
+import time
+from pathlib import Path
+
+# Enable importing sibling scripts (serial_monitor)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from serial_monitor import Paths, running_pid, resolve_port, PortError
+except ImportError:
+    Paths = None
+    running_pid = None
+    resolve_port = None
+    PortError = RuntimeError
 
 CRASH_PATTERNS = [
     {
@@ -72,28 +84,69 @@ def main():
     parser = argparse.ArgumentParser(description="ESP32 Crash Dump Diagnostic Analyzer")
     parser.add_argument("--file", help="Path to serial log file")
     parser.add_argument("--text", help="Direct text of crash log")
-    parser.add_argument("--port", help="Sample live from serial port (e.g. /dev/ttyACM0)")
+    parser.add_argument("--port", help="Sample live from serial port or active monitor (e.g. /dev/ttyACM0 or 'auto')")
     parser.add_argument("--timeout", type=int, default=5, help="Serial capture timeout in seconds")
 
     args = parser.parse_args()
 
     content = ""
-    if args.port:
-        try:
-            import serial
-            import time
-            print(f"[*] Capturing {args.timeout}s of serial logs from {args.port}...")
-            with serial.Serial(args.port, 115200, timeout=1.0) as ser:
-                start = time.time()
-                lines = []
-                while time.time() - start < args.timeout:
-                    l = ser.readline().decode('utf-8', errors='ignore')
-                    if l:
-                        lines.append(l)
-                content = "".join(lines)
-        except Exception as e:
-            print(f"[ERROR] Failed to read from {args.port}: {e}", file=sys.stderr)
-            sys.exit(1)
+    target_port = args.port
+
+    # If neither --file nor --text was provided, assume live port inspection
+    if not args.file and not args.text and not target_port:
+        target_port = "auto"
+
+    if target_port:
+        port = target_port
+        if resolve_port:
+            try:
+                port = resolve_port(target_port)
+            except Exception:
+                port = target_port
+
+        # Check if serial monitor is already active for this port
+        paths = Paths(port) if Paths else None
+        pid = running_pid(paths) if (paths and running_pid) else None
+
+        if pid is not None and paths and paths.log.exists():
+            print(f"[*] Active serial monitor detected on {port} (pid {pid}).")
+            print(f"[*] Reading crash logs from shared stream...")
+            try:
+                with open(paths.log, "r", errors="ignore") as f:
+                    all_lines = f.readlines()
+                    recent_lines = all_lines[-150:] if len(all_lines) > 150 else all_lines
+
+                if args.timeout > 0:
+                    start_time = time.time()
+                    initial_pos = paths.log.stat().st_size
+                    with open(paths.log, "r", errors="ignore") as f:
+                        f.seek(initial_pos)
+                        while time.time() - start_time < args.timeout:
+                            new_line = f.readline()
+                            if new_line:
+                                recent_lines.append(new_line)
+                            else:
+                                time.sleep(0.1)
+                content = "".join(recent_lines)
+            except Exception as e:
+                print(f"[ERROR] Failed reading shared monitor log: {e}", file=sys.stderr)
+                sys.exit(1)
+
+        else:
+            try:
+                import serial
+                print(f"[*] Capturing {args.timeout}s of serial logs from {port}...")
+                with serial.Serial(port, 115200, timeout=1.0) as ser:
+                    start = time.time()
+                    lines = []
+                    while time.time() - start < args.timeout:
+                        l = ser.readline().decode('utf-8', errors='ignore')
+                        if l:
+                            lines.append(l)
+                    content = "".join(lines)
+            except Exception as e:
+                print(f"[ERROR] Failed to read from {port}: {e}", file=sys.stderr)
+                sys.exit(1)
 
     elif args.file:
         with open(args.file, "r") as f:
@@ -102,11 +155,8 @@ def main():
     elif args.text:
         content = args.text
 
-    else:
-        print("[ERROR] Must provide --file, --text, or --port", file=sys.stderr)
-        sys.exit(1)
-
     analyze_text(content)
 
 if __name__ == "__main__":
     main()
+

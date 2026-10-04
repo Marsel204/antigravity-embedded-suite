@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-serial_monitor.py - Serial monitor for the embedded-micro skill.
+serial_monitor.py - Serial monitor for the embedded-triage skill.
 
 Opens a live serial monitor in its own terminal window for the user. The agent
 reads the same output from a log file, so the two never fight over the port.
