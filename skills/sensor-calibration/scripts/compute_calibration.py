@@ -8,48 +8,113 @@ import sys
 import re
 import math
 import argparse
+import time
+from pathlib import Path
+
+# Enable importing sibling scripts (serial_monitor)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from serial_monitor import Paths, running_pid, resolve_port
+except ImportError:
+    Paths = None
+    running_pid = None
+    resolve_port = None
+
+def parse_raw_value(line: str) -> float | None:
+    # Strip any monitor timestamp prefix: [YYYY-MM-DD HH:MM:SS]
+    clean_line = re.sub(r'^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\]\s*', '', line.strip())
+    if "RAW:" in clean_line.upper():
+        match = re.search(r'RAW:\s*(-?\d+(?:\.\d+)?)', clean_line, re.IGNORECASE)
+    else:
+        match = re.search(r'(-?\d+(?:\.\d+)?)', clean_line)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
 
 def sample_from_serial(port: str, baud: int = 115200, count: int = 20) -> list[float]:
-    try:
-        import serial
-        import time
-    except ImportError:
-        print("[ERROR] pyserial is required for live sampling. Install via: pip install pyserial", file=sys.stderr)
-        sys.exit(1)
+    target_port = port
+    if resolve_port:
+        try:
+            target_port = resolve_port(port)
+        except Exception:
+            target_port = port
 
-    print(f"[*] Opening {port} at {baud} baud to harvest {count} raw samples...")
-    samples = []
-    start_time = time.time()
+    paths = Paths(target_port) if Paths else None
+    pid = running_pid(paths) if (paths and running_pid) else None
+    samples: list[float] = []
     max_timeout = 8.0
 
-    try:
-        with serial.Serial(port, baud, timeout=1.0) as ser:
-            time.sleep(0.5)
-            ser.reset_input_buffer()
+    if pid is not None and paths and paths.log.exists():
+        print(f"[*] Active serial monitor detected on {target_port} (pid {pid}).")
+        print(f"[*] Harvesting {count} samples from shared monitor stream...")
+        start_time = time.time()
 
-            while len(samples) < count and (time.time() - start_time < max_timeout):
-                line = ser.readline().decode('utf-8', errors='ignore').strip()
-                if not line:
-                    continue
-                
-                match = re.search(r'(?:RAW:\s*)?(-?\d+(?:\.\d+)?)', line, re.IGNORECASE)
-                if match:
-                    try:
-                        val = float(match.group(1))
+        try:
+            # Check recent lines already present in the log
+            with open(paths.log, "r", errors="ignore") as f:
+                all_lines = f.readlines()
+                for line in reversed(all_lines[-100:]):
+                    val = parse_raw_value(line)
+                    if val is not None:
                         samples.append(val)
-                    except ValueError:
-                        continue
+                        if len(samples) >= count:
+                            break
+            samples.reverse()
 
-    except Exception as e:
-        print(f"[ERROR] Failed to read from {port}: {e}", file=sys.stderr)
-        sys.exit(1)
+            # If more samples needed, tail the newly arriving lines
+            if len(samples) < count:
+                initial_pos = paths.log.stat().st_size
+                with open(paths.log, "r", errors="ignore") as f:
+                    f.seek(initial_pos)
+                    while len(samples) < count and (time.time() - start_time < max_timeout):
+                        line = f.readline()
+                        if not line:
+                            time.sleep(0.05)
+                            continue
+                        val = parse_raw_value(line)
+                        if val is not None:
+                            samples.append(val)
+        except Exception as e:
+            print(f"[ERROR] Failed to read from monitor log {paths.log}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    else:
+        try:
+            import serial
+        except ImportError:
+            print("[ERROR] pyserial is required for live sampling. Install via: pip install pyserial", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"[*] Opening {target_port} at {baud} baud to harvest {count} raw samples...")
+        start_time = time.time()
+
+        try:
+            with serial.Serial(target_port, baud, timeout=1.0) as ser:
+                time.sleep(0.5)
+                ser.reset_input_buffer()
+
+                while len(samples) < count and (time.time() - start_time < max_timeout):
+                    line = ser.readline().decode('utf-8', errors='ignore').strip()
+                    if not line:
+                        continue
+                    val = parse_raw_value(line)
+                    if val is not None:
+                        samples.append(val)
+
+        except Exception as e:
+            print(f"[ERROR] Failed to read from {target_port}: {e}", file=sys.stderr)
+            sys.exit(1)
 
     if not samples:
-        print(f"[ERROR] No valid data received from {port} within timeout.", file=sys.stderr)
+        print(f"[ERROR] No valid data received from {target_port} within timeout.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[OK] Successfully captured {len(samples)} samples over {port}.")
+    print(f"[OK] Successfully captured {len(samples)} samples over {target_port}.")
     return samples
+
 
 def filter_samples(raw_values: list[float]) -> tuple[float, float, list[float]]:
     if not raw_values:
