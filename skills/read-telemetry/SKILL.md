@@ -5,6 +5,8 @@ description: Ingest, preprocess, deduplicate, and statistically summarize stream
 
 # Microcontroller Sensor Telemetry Processing Skill
 
+`<skill-dir>` is the directory containing this SKILL.md; sibling skills are at `<skill-dir>/../<name>/`.
+
 This skill defines the operational protocol for token-efficient inspection, deduplication, and statistical aggregation of high-frequency microcontroller serial streams.
 
 ---
@@ -21,7 +23,7 @@ Agents MUST preprocess serial logs using `process_telemetry.py` to extract conci
 ### Mode 1: Statistical Window Summary (DEFAULT & RECOMMENDED)
 Aggregates numeric channels over a sample window (default 3 seconds) into a compact Markdown table:
 ```bash
-python3 ~/.gemini/config/skills/read-telemetry/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 3 --mode summary
+python3 <skill-dir>/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 3 --mode summary
 ```
 *Output Format:*
 ```text
@@ -37,7 +39,7 @@ python3 ~/.gemini/config/skills/read-telemetry/scripts/process_telemetry.py --po
 ### Mode 2: Run-Length Deduplication (`dedup`)
 Collapses bursts of identical consecutive lines into count annotations:
 ```bash
-python3 ~/.gemini/config/skills/read-telemetry/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 3 --mode dedup
+python3 <skill-dir>/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 3 --mode dedup
 ```
 *Output Format:*
 ```text
@@ -50,7 +52,7 @@ ANALOG: GPIO1=1820, GPIO9=54 | PULLDOWN: GPIO4=0
 ### Mode 3: Delta / Change Filtering (`deltas`)
 Suppresses baseline noise and only outputs samples when a numeric value changes by more than `--threshold`:
 ```bash
-python3 ~/.gemini/config/skills/read-telemetry/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 5 --mode deltas --threshold 50.0
+python3 <skill-dir>/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 5 --mode deltas --threshold 50.0
 ```
 *Best for:* Trigger events, threshold crossings, button presses, and state changes.
 
@@ -59,7 +61,7 @@ python3 ~/.gemini/config/skills/read-telemetry/scripts/process_telemetry.py --po
 ### Mode 4: Instant Channel Snapshot (`snapshot`)
 Outputs a single, 1-line key-value summary of the latest state across all active channels:
 ```bash
-python3 ~/.gemini/config/skills/read-telemetry/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 2 --mode snapshot
+python3 <skill-dir>/scripts/process_telemetry.py --port /dev/ttyACM0 --duration 2 --mode snapshot
 ```
 *Output Format:*
 ```text
@@ -76,7 +78,7 @@ The preprocessor automatically accepts:
 2. **Log File:**
    `--file /path/to/serial.log`
 3. **Piped Stdin:**
-   `cat serial.log | python3 ~/.gemini/config/skills/read-telemetry/scripts/process_telemetry.py`
+   `cat serial.log | python3 <skill-dir>/scripts/process_telemetry.py`
 4. **Shared Monitor Stream:**
    Automatically detects and reads from active serial monitor logs without port lock contention.
 

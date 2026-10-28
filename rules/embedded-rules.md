@@ -1,8 +1,9 @@
 # Embedded & Microcontroller Engineering Guardrails
 
 ## 1. Bounded Serial Operations
-- NEVER launch an unbounded serial monitor command (e.g. `arduino-cli monitor`, `miniterm`, `picocom`, `pio device monitor`).
-- All serial inspection commands MUST be wrapped in a strict timeout (e.g., `timeout 5s arduino-cli monitor -p <port> -c baudrate=<baud> 2>&1 || true`).
+- Agent-run captures must be bounded; unbounded commands are allowed only as user copy-paste commands or windows explicitly requested by the user. Never launch an unbounded agent capture (e.g. `arduino-cli monitor`, `miniterm`, `picocom`, `pio device monitor`).
+- All agent-run serial inspection commands MUST be wrapped in a strict timeout (e.g., `timeout 5s arduino-cli monitor -p <port> -c baudrate=<baud> 2>&1`).
+- Exit 124 means the capture window ended; any other nonzero exit is a real port/tool failure to report. Release only task-owned monitors before upload; don’t kill unrelated user sessions.
 
 ## 2. Headless Boot Safety
 - Do NOT write blocking serial loops like `while (!Serial);` in embedded code. If waiting for serial is needed for debugging, always enforce a timeout:

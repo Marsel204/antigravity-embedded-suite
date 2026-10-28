@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 for skill_dir in [
     Path(__file__).resolve().parents[2] / "embedded-micro/scripts",
     Path(__file__).resolve().parents[2] / "embedded-triage/scripts",
-    Path.home() / ".gemini/config/skills/embedded-micro/scripts",
 ]:
     if skill_dir.is_dir():
         sys.path.insert(0, str(skill_dir))

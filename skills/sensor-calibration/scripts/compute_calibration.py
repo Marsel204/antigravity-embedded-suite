@@ -93,8 +93,8 @@ def sample_from_serial(port: str, baud: int = 115200, count: int = 20) -> list[f
 
         try:
             with serial.Serial(target_port, baud, timeout=1.0) as ser:
-                time.sleep(0.5)
                 ser.reset_input_buffer()
+                time.sleep(0.5)
 
                 while len(samples) < count and (time.time() - start_time < max_timeout):
                     line = ser.readline().decode('utf-8', errors='ignore').strip()
@@ -129,7 +129,7 @@ def filter_samples(raw_values: list[float]) -> tuple[float, float, list[float]]:
 
     return filtered_mean, stddev, filtered
 
-def compute_two_point(raw1: float, phys1: float, raw2: float, phys2: float):
+def compute_two_point(raw1: float, phys1: float, raw2: float, phys2: float, clamp=None):
     if raw1 == raw2:
         print("[ERROR] Raw Point 1 and Raw Point 2 cannot be identical!", file=sys.stderr)
         sys.exit(1)
@@ -153,9 +153,9 @@ def compute_two_point(raw1: float, phys1: float, raw2: float, phys2: float):
     print("""
 float read_calibrated_sensor(int raw_adc) {
     float val = (CALIB_SLOPE * (float)raw_adc) + CALIB_OFFSET;
-    return constrain(val, 0.0f, 100.0f);
+    RETURN_VALUE
 }
-""")
+""".replace("RETURN_VALUE", f"return constrain(val, {clamp[0]}f, {clamp[1]}f);" if clamp else "return val;"))
 
 def compute_tare_scale(tare: float, known_raw: float, known_weight: float):
     if known_raw == tare:
@@ -222,6 +222,8 @@ def main():
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate (default: 115200)")
     parser.add_argument("--count", type=int, default=20, help="Number of samples to capture")
 
+    parser.add_argument("--clamp", nargs=2, type=float, metavar=("MIN", "MAX"), help="Optional two-point output limits")
+
     # Two-point arguments
     parser.add_argument("--raw1", type=float)
     parser.add_argument("--phys1", type=float)
@@ -246,6 +248,19 @@ def main():
 
     args = parser.parse_args()
 
+    if args.known_weight is not None and (not math.isfinite(args.known_weight) or args.known_weight <= 0):
+        parser.error("--known-weight must be positive and finite")
+    if args.mode == "two-point" and args.raw1 is not None and args.raw1 == args.raw2:
+        parser.error("two-point raw1 and raw2 must be distinct")
+    if args.mode == "poly3":
+        xs = [args.x1, args.x2, args.x3]
+        if None not in xs and len(set(xs)) != 3:
+            parser.error("poly3 X values must be distinct")
+    if args.clamp and (not all(map(math.isfinite, args.clamp)) or args.clamp[0] >= args.clamp[1]):
+        parser.error("--clamp requires finite MIN < MAX")
+    if args.clamp and args.mode != "two-point":
+        parser.error("--clamp requires --mode two-point")
+
     # If sampling from serial port directly
     if args.sample_port:
         raw_list = sample_from_serial(args.sample_port, args.baud, args.count)
@@ -264,7 +279,7 @@ def main():
         if None in (args.raw1, args.phys1, args.raw2, args.phys2):
             print("[ERROR] --mode two-point requires --raw1, --phys1, --raw2, --phys2", file=sys.stderr)
             sys.exit(1)
-        compute_two_point(args.raw1, args.phys1, args.raw2, args.phys2)
+        compute_two_point(args.raw1, args.phys1, args.raw2, args.phys2, args.clamp)
 
     elif args.mode == "tare-scale":
         if None in (args.tare, args.known_raw, args.known_weight):

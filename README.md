@@ -4,7 +4,7 @@
 [![Microcontroller: ESP32 & Arduino](https://img.shields.io/badge/Platform-ESP32%20%7C%20Arduino%20%7C%20RP2040-blue.svg)](https://espressif.com)
 [![Harness: Antigravity](https://img.shields.io/badge/Agent%20Harness-Antigravity%20%2F%20Claude%20Code-purple.svg)](https://github.com)
 
-The **Antigravity Embedded Engineering Suite** is a 4-pillar agentic development framework for microcontrollers (ESP32, ESP32-S3, ESP32-C3, Arduino Uno/Nano/Mega, RP2040). It equips AI coding assistants with end-to-end hardware intelligence—from electrical schematic design to headless compilation, automated flashing, sensor calibration, and crash triage.
+The **Antigravity Embedded Engineering Suite** is a 5-pillar agentic development framework for microcontrollers (ESP32, ESP32-S3, ESP32-C3, Arduino Uno/Nano/Mega, RP2040). It equips AI coding assistants with end-to-end hardware intelligence—from electrical schematic design to headless compilation, automated flashing, sensor calibration, and crash triage.
 
 ---
 
@@ -90,11 +90,14 @@ antigravity-embedded-suite/
 ## Installation
 
 ### For Antigravity
-Copy the skills and rules into your local Antigravity configuration directory:
+Set the destination to your harness configuration directory (for Antigravity, typically `$HOME/.gemini/config`), then copy the sibling skills and rules:
 ```bash
-cp -r skills/* ~/.gemini/config/skills/
-cp -r rules/* ~/.gemini/config/rules/
+embedded_config="$HOME/.gemini/config"
+cp -r skills/* "$embedded_config/skills/"
+cp -r rules/* "$embedded_config/rules/"
 ```
+
+Skills resolve bundled resources relative to their own SKILL.md; keep all five skill directories as siblings. Agent captures use `timeout 5s arduino-cli monitor ...`: status 124 means the window ended; other nonzero statuses indicate failures. Hardware uploads require existing user authorization.
 
 ### For Claude Code
 Copy into your Claude skills directory:

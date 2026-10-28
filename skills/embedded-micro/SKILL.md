@@ -5,6 +5,8 @@ description: Build, verify, flash, and monitor microcontrollers (ESP32, Arduino 
 
 # Microcontroller & Embedded Development Harness
 
+`<skill-dir>` is the directory containing this SKILL.md; sibling skills are at `<skill-dir>/../<name>/`.
+
 This skill defines the operational protocol for autonomous firmware development, headless compilation, hardware safety validation, flashing, and automatic serial verification across Arduino and ESP32 boards.
 
 ---
@@ -42,7 +44,7 @@ When scanning for boards (`arduino-cli board list` or `ls /dev/tty*`):
 Before writing or modifying pin assignments in firmware, run the validation tool to catch hardware traps, flash collisions, and strapping pin failures:
 
 ```bash
-python3 ~/.gemini/config/skills/embedded-micro/scripts/validate_pins.py --platform <esp32|esp32s3> --pins <comma-separated-gpios> [--wifi]
+python3 <skill-dir>/scripts/validate_pins.py --platform <esp32|esp32s3> --pins <comma-separated-gpios> [--wifi]
 ```
 
 ---
@@ -69,11 +71,11 @@ pio run 2>&1 | tail -n 25
 The standard protocol for observing serial output on microcontrollers uses native `arduino-cli monitor`.
 
 ### 5A. Direct Terminal Serial Monitor
-To monitor serial logs interactively:
+For an agent-run capture:
 ```bash
-arduino-cli monitor -p <port> -c baudrate=115200
+timeout 5s arduino-cli monitor -p <port> -c baudrate=115200
 ```
-*(Exit the monitor at any time using `Ctrl + C`)*.
+Release the port held by the task-owned monitor; don’t kill unrelated user sessions.
 
 ### 5B. Dedicated Window Launcher (When Requested)
 If the user requests to launch the serial monitor in its own desktop window:
@@ -84,10 +86,10 @@ alacritty --title "Serial Monitor (<port>)" -e arduino-cli monitor -p <port> -c 
 
 ### 5C. Port Exclusivity & Pre-Flash Rule (CRITICAL)
 Linux enforces exclusive serial device locking (`TIOCEXCL`).
-* **Before running `arduino-cli upload`:** Any active `arduino-cli monitor` process or window MUST be stopped (`Ctrl + C` or kill) to prevent `[Errno 16] Device or resource busy`.
+* **Before running `arduino-cli upload`:** Release the port held by the task-owned monitor to prevent `[Errno 16] Device or resource busy`; don’t kill unrelated user sessions.
 * **After upload completes:** Re-launch or restart the monitor.
 
-*(Optional background telemetry helper: `python3 ~/.gemini/config/skills/embedded-micro/scripts/serial_monitor.py` is preserved for headless cooperative multiplexing if needed).*
+*(Optional background telemetry helper: `python3 <skill-dir>/scripts/serial_monitor.py` offers bounded `capture` for headless inspection; use `--help` for its arguments and reserve interactive launch for explicit user requests).*
 
 ---
 
@@ -98,7 +100,7 @@ Whenever firmware is flashed to a physical board, the agent MUST execute this ve
 ### Step 6A: Automated Boot Capture (MANDATORY)
 Immediately after flashing succeeds, capture the first 5 seconds of boot output using native `arduino-cli monitor`:
 ```bash
-timeout 5s arduino-cli monitor -p <port> -c baudrate=115200 2>&1 || true
+timeout 5s arduino-cli monitor -p <port> -c baudrate=115200 2>&1
 ```
 *(Or read via Python telemetry script if programmatic stream parsing is needed)*.
 
@@ -118,3 +120,9 @@ Always display the captured boot output directly in chat under:
 
 
 
+
+Agent-run captures are bounded. Exit 124 means the capture window ended; any other nonzero exit is a real port/tool failure to report. A timeout alone does not establish runtime correctness.
+
+## Hardware Execution Scope
+
+Compiling does not authorize overwriting a connected board. Flash only within existing user authorization; otherwise compile and prepare the exact board identity, FQBN, port, and sketch/image, then ask for the missing authorization. Verify board identity before upload and stop if discovery is ambiguous. Keep build success, upload success, observed boot, and functional validation as distinct evidence; report which were actually checked.
