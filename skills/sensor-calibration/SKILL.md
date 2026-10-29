@@ -5,6 +5,8 @@ description: Guide interactive sensor calibration experiments, sample raw ADC/se
 
 # Sensor Calibration & Interactive Experimentation Skill
 
+`<skill-dir>` is the directory containing this SKILL.md; sibling skills are at `<skill-dir>/../<name>/`.
+
 This skill defines the operational protocol for Human-in-the-Loop hardware calibration, statistical serial sampling, mathematical curve fitting, and non-volatile parameter persistence tailored to specific sensor physics.
 
 ---
@@ -31,9 +33,9 @@ arduino-cli upload -p <port> --fqbn <target> <sampler-sketch>
 1. **Interactive Serial Monitor:**
    Open serial monitor so the user can watch raw readings stabilize:
    ```bash
-   arduino-cli monitor -p <port> -c baudrate=115200
+   timeout 5s arduino-cli monitor -p <port> -c baudrate=115200
    ```
-   *(Or launch in separate window: `alacritty --title "Calibration Monitor" -e arduino-cli monitor -p <port> -c baudrate=115200 &`)*.
+   *(Only when the user explicitly requests a separate window: `alacritty --title "Calibration Monitor" -e arduino-cli monitor -p <port> -c baudrate=115200 &`)*.
 
 2. **Issue Physical Step Prompt:**
    Provide tailored physical instructions matching the sensor's physical medium and wait for user confirmation:
@@ -41,9 +43,9 @@ arduino-cli upload -p <port> --fqbn <target> <sampler-sketch>
    - *Example (Load Cell):* "Step 1: Remove all items from the scale platform (Tare state). Type 'ready' when stable."
 
 ### Phase 3: Automated Bounded Serial Data Harvesting
-The instant the user says "ready", exit the interactive monitor (`Ctrl + C`) and capture 20 raw samples:
+After the user confirms readiness, use the task-owned shared monitor stream or release the port held by the task-owned monitor; don’t kill unrelated user sessions. Capture 20 raw samples:
 ```bash
-python3 ~/.gemini/config/skills/sensor-calibration/scripts/compute_calibration.py --sample-port <port> --count 20
+python3 <skill-dir>/scripts/compute_calibration.py --sample-port <port> --count 20
 ```
 - Reads 20 samples directly (or from shared monitor stream if running).
 - Computes mean and standard deviation. Discards samples with high variance (noise/movement).
@@ -51,19 +53,19 @@ python3 ~/.gemini/config/skills/sensor-calibration/scripts/compute_calibration.p
 ### Phase 4: Multi-Point Testing & Mathematical Fit
 Prompt for subsequent reference states (e.g. pH 4.01 buffer, or known test weight) and compute the exact mathematical model:
 ```bash
-python3 ~/.gemini/config/skills/sensor-calibration/scripts/compute_calibration.py \
+python3 <skill-dir>/scripts/compute_calibration.py \
   --mode <two-point|tare-scale|poly3> [arguments...]
 ```
 
 ### Phase 5: Deploy Production Firmware with NVS Flash Persistence
-1. Stop any running serial monitor to free the port.
+1. Release the port held by the task-owned monitor; don’t kill unrelated user sessions.
 2. Generate and flash production firmware using ESP32 `Preferences.h` (or Arduino `EEPROM.h`) storing the calculated parameters:
    ```bash
    arduino-cli upload -p <port> --fqbn <target> <production-sketch>
    ```
 3. Verify live operation:
    ```bash
-   arduino-cli monitor -p <port> -c baudrate=115200
+   timeout 5s arduino-cli monitor -p <port> -c baudrate=115200
    ```
 
 
@@ -83,3 +85,9 @@ python3 ~/.gemini/config/skills/sensor-calibration/scripts/compute_calibration.p
 ## 3. Handshake with `embedded-micro`
 * Use `embedded-micro` to compile and upload the raw sampler sketch in Phase 1.
 * Use `embedded-micro` to flash the final production firmware in Phase 5.
+
+Agent-run captures are bounded. Exit 124 means the capture window ended; any other nonzero exit is a real port/tool failure to report. A timeout alone does not establish runtime correctness.
+
+Sampler and production flashing replace firmware. Confirm existing authorization for the exact board, FQBN, port, image, and NVS/EEPROM writes; prepare these details and ask if authorization is missing. Compile each image before upload, verify board identity, and distinguish build/upload/observed boot/functional validation. Wait for physical readiness before dependent sampling.
+
+Two-point output returns the linear result without clamping. Use `--clamp MIN MAX` only when the physical range requires it. Known weight must be positive and finite; two-point raw values and poly3 x values must be distinct.

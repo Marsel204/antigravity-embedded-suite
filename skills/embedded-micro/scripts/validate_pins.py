@@ -9,6 +9,7 @@ import argparse
 
 PINS_DB = {
     "esp32": {
+        "valid": set(range(20)) | {21, 22, 23, 25, 26, 27} | set(range(32, 40)),
         "flash": {6, 7, 8, 9, 10, 11},
         "strapping": {
             0: "Bootloader selector (LOW = Download Mode)",
@@ -22,6 +23,7 @@ PINS_DB = {
         "psram": {16, 17}
     },
     "esp32s3": {
+        "valid": set(range(22)) | set(range(26, 49)),
         "flash": {26, 27, 28, 29, 30, 31, 32},
         "octal_psram": {33, 34, 35, 36, 37},
         "strapping": {
@@ -39,8 +41,8 @@ PINS_DB = {
 def validate_pins(platform: str, pins: list[int], wifi_enabled: bool = False):
     platform = platform.lower().replace("-", "")
     if platform not in PINS_DB:
-        print(f"[!] Platform '{platform}' not in pin safety database. Safe checks skipped.")
-        return 0
+        print(f"[ERROR] Platform '{platform}' not in pin safety database. Unsupported platform.")
+        return 1
 
     db = PINS_DB[platform]
     errors = 0
@@ -48,6 +50,10 @@ def validate_pins(platform: str, pins: list[int], wifi_enabled: bool = False):
 
     print(f"=== Pin Safety Validation: {platform.upper()} ===")
     for pin in pins:
+        if pin not in db["valid"]:
+            print(f"[ERROR] GPIO {pin}: Does not exist on {platform}.")
+            errors += 1
+            continue
         # Check SPI Flash
         if pin in db.get("flash", set()):
             print(f"[ERROR] GPIO {pin}: RESERVED for SPI Flash. System will crash or fail to boot!")
@@ -87,10 +93,13 @@ def validate_pins(platform: str, pins: list[int], wifi_enabled: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Microcontroller Pin Safety Validator")
-    parser.add_argument("--platform", default="esp32s3", help="Target: esp32, esp32s3")
+    parser.add_argument("--platform", default="esp32s3", type=lambda s: s.lower().replace("-", ""), choices=sorted(PINS_DB), help="Target: esp32, esp32s3")
     parser.add_argument("--pins", required=True, help="Comma-separated GPIO numbers (e.g., 4,19,45)")
     parser.add_argument("--wifi", action="store_true", help="Set if firmware uses Wi-Fi")
     args = parser.parse_args()
 
-    pin_list = [int(p.strip()) for p in args.pins.split(",") if p.strip()]
+    try:
+        pin_list = [int(p.strip()) for p in args.pins.split(",")]
+    except ValueError:
+        parser.error("--pins requires comma-separated numeric GPIO numbers")
     sys.exit(validate_pins(args.platform, pin_list, args.wifi))

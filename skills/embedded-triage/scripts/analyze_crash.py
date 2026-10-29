@@ -82,7 +82,7 @@ def analyze_text(text: str):
 
 def main():
     parser = argparse.ArgumentParser(description="ESP32 Crash Dump Diagnostic Analyzer")
-    parser.add_argument("--file", help="Path to serial log file")
+    parser.add_argument("--file", help="Path to serial log file, or - for stdin")
     parser.add_argument("--text", help="Direct text of crash log")
     parser.add_argument("--port", help="Sample live from serial port or active monitor (e.g. /dev/ttyACM0 or 'auto')")
     parser.add_argument("--timeout", type=int, default=5, help="Serial capture timeout in seconds")
@@ -94,7 +94,10 @@ def main():
 
     # If neither --file nor --text was provided, assume live port inspection
     if not args.file and not args.text and not target_port:
-        target_port = "auto"
+        if sys.stdin.isatty():
+            target_port = "auto"
+        else:
+            content = sys.stdin.read()
 
     if target_port:
         port = target_port
@@ -149,11 +152,18 @@ def main():
                 sys.exit(1)
 
     elif args.file:
-        with open(args.file, "r") as f:
-            content = f.read()
+        if args.file == "-":
+            content = sys.stdin.read()
+        else:
+            with open(args.file, "r") as f:
+                content = f.read()
 
     elif args.text:
         content = args.text
+
+    if not target_port and not args.text and not content.strip():
+        print("[ERROR] No crash log input. Use --file PATH, --file - with piped text, --text, or --port PORT|auto for live capture.", file=sys.stderr)
+        sys.exit(2)
 
     analyze_text(content)
 
